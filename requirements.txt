@@ -1,0 +1,9 @@
+streamlit
+python-dotenv
+groq
+langchain
+sentence-transformers
+pandas
+python-docx
+faiss-cpu
+torch
