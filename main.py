@@ -14,6 +14,7 @@ import logging
 import torch
 import faiss
 import numpy as np
+os.environ["STREAMLIT_SERVER_FILE_WATCHER"] = "false"
 
 # 環境初始化
 load_dotenv()
