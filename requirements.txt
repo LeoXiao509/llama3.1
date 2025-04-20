@@ -16,6 +16,13 @@ streamlit>=1.22.0
 langchain>=0.0.200
 groq>=0.3.0
 
+# Flask 後端相關
+flask>=2.2.0
+flask-session>=0.4.0
+flask-wtf>=1.0.0
+werkzeug>=2.2.0
+
 # 其他工具
 pickle-mixin>=1.0.0
-tqdm>=4.62.0  # 進度條工具（建議添加）
+tqdm>=4.62.0
+uuid>=1.30.0
