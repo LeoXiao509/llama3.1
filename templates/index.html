@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GoatPro 山羊問答系統</title>
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Bootstrap Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    body { background-color: #f8f9fa; }
+    .sidebar { background-color: #fff; padding: 20px; border-right: 1px solid #dee2e6; }
+
+    /* 功能按鈕 */
+    .sidebar .module-btn {
+      width: 50%;
+      margin: 0.5rem auto;
+      display: block;
+      background-color: purple;
+      border-color: purple;
+      color: #fff;
+      border-radius: 25px;
+    }
+    .sidebar .module-btn:hover {
+      background-color: green;
+      border-color: green;
+    }
+
+    /* 歷史對話 */
+    .history-container {
+      max-height: 300px;      /* 框高固定 */
+      overflow-y: auto;       /* 滾輪呈現超出的部分 */
+      margin: 1rem 0;
+    }
+    .history-container .list-group-item {
+      cursor: pointer;
+    }
+
+    /* 聊天室 */
+    .chat-container {
+      display: flex; flex-direction: column;
+      height: 90vh;
+      background-image: url('{{ logo_url }}');
+      background-repeat: no-repeat;
+      background-position: center;
+      background-size: contain;
+      border: 1px solid #dee2e6;
+      border-radius: 5px;
+    }
+    .chat-messages { flex: 1; overflow-y: auto; padding: 15px; }
+    .chat-input { border-top: 1px solid #dee2e6; padding: 10px; }
+    .chat-input input { border-radius: 25px !important; border: 1px solid #ccc; }
+    .chat-input button {
+      border-radius: 25px; background-color: purple;
+      border-color: purple; color: #fff;
+    }
+    .chat-input button:hover {
+      background-color: rebeccapurple;
+      border-color: rebeccapurple;
+    }
+
+    /* 聊天泡泡 */
+    .chat-message {
+      max-width: 75%; margin-bottom: 10px; padding:10px;
+      border-radius:10px; clear:both;
+    }
+    .chat-message.user {
+      background-color: #d1e7dd; float: right; text-align: right;
+    }
+    .chat-message.assistant {
+      background-color: #f8d7da; float: left; text-align: left;
+    }
+    .clearfix::after { content:""; clear:both; display:table; }
+  </style>
+</head>
+<body>
+<div class="container-fluid">
+  <div class="row">
+    <!-- 左側 sidebar -->
+    <div class="col-12 col-md-4 sidebar">
+      <a href="{{ url_for('goat_profile') }}" class="btn module-btn">山羊履歷管理模組</a>
+      <a href="{{ url_for('sensor_module') }}" class="btn module-btn">羊舍感測模組</a>
+      <a href="{{ url_for('new_session') }}" class="btn module-btn">新增對話</a>
+
+      <!-- 歷史對話清單 -->
+      <div class="history-container">
+        <div class="list-group">
+          {# 先把 sessions 轉 list、倒序 (最新第一) #}
+          {% set items = sessions.items()|list %}
+          {% set rev = items[::-1] %}
+          {% for sid, sess in rev %}
+            <div class="list-group-item d-flex justify-content-between align-items-center
+                        {% if sid == active_session_id %}active{% endif %}">
+              <a href="{{ url_for('index', session_id=sid) }}"
+                 class="flex-grow-1 text-decoration-none
+                        {% if sid == active_session_id %}text-white{% else %}text-dark{% endif %}">
+                {{ sess.name }}
+              </a>
+              <div class="btn-group btn-group-sm ms-2">
+                <button class="btn btn-light rename-btn"
+                        data-session-id="{{ sid }}"
+                        data-session-name="{{ sess.name }}">
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-light delete-btn"
+                        data-session-id="{{ sid }}">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <hr>
+      <form action="/" method="POST" enctype="multipart/form-data" class="mb-3">
+        <label class="form-label">上傳技術文件 (PDF/CSV)：</label>
+        <input class="form-control" type="file" name="files" multiple accept=".pdf,.csv">
+        <button type="submit" name="upload" class="btn btn-primary mt-2">上傳</button>
+      </form>
+      <h6>知識庫統計 📊</h6>
+      <ul class="list-unstyled">
+        <li>總資料條數：{{ kb_stats.total }}</li>
+        <li>已處理檔案數：{{ kb_stats.files }}</li>
+      </ul>
+    </div>
+
+    <!-- 右側聊天室 -->
+    <div class="col-12 col-md-8 d-flex flex-column p-4">
+      <h1 class="mb-2">🐐 GoatPro 山羊問答系統</h1>
+      <p class="text-muted mb-3">結合最新 RAG 技術與農業領域知識的智慧解決方案</p>
+
+      <div class="chat-container">
+        <div class="chat-messages">
+          {% if chat_history %}
+            {% for msg in chat_history %}
+              <div class="chat-message {{ msg.role }} clearfix">
+                <strong>{{ '你：' if msg.role=='user' else '系統：' }}</strong><br>
+                {{ msg.content | safe }}
+              </div>
+            {% endfor %}
+          {% else %}
+            <p class="text-muted">尚無對話記錄，請點「新增對話」或輸入問題。</p>
+          {% endif %}
+        </div>
+        <div class="chat-input">
+          <form action="/" method="POST" class="d-flex">
+            <input type="text" name="query" class="form-control me-2"
+                   placeholder="輸入關於山羊養殖的技術問題..." required>
+            <button class="btn" type="submit">送出</button>
+          </form>
+        </div>
+      </div>
+
+      {% if search_results %}
+        <div class="accordion mt-3" id="searchResultsAccordion">
+          <div class="accordion-item">
+            <h2 class="accordion-header" id="headingOne">
+              <button class="accordion-button collapsed" type="button"
+                      data-bs-toggle="collapse" data-bs-target="#collapseOne">
+                📄 檢索到的技術資料片段
+              </button>
+            </h2>
+            <div id="collapseOne" class="accordion-collapse collapse">
+              <div class="accordion-body">
+                {% for _, result in search_results|enumerate %}
+                  <div class="mb-3">
+                    <p class="small text-secondary">
+                      匹配度：{{ (result.score * 100)|round(2) }}%
+                    </p>
+                    <pre style="white-space: pre-wrap;">{{ result.text[:500] }}...</pre>
+                    <hr>
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endif %}
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <ul class="list-unstyled mt-3">
+          {% for category, msg in messages %}
+            <li class="text-{{ 'success' if category=='success' else 'danger' }}">
+              {{ msg }}
+            </li>
+          {% endfor %}
+          </ul>
+        {% endif %}
+      {% endwith %}
+    </div>
+  </div>
+</div>
+
+<!-- Rename Modal -->
+<div class="modal fade" id="renameModal" tabindex="-1" aria-labelledby="renameModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <form action="{{ url_for('rename_session') }}" method="POST" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="renameModalLabel">修改對話名稱</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" name="session_id" id="renameSessionId">
+        <div class="mb-3">
+          <label class="form-label">新名稱</label>
+          <input type="text" class="form-control" name="new_name" id="newName" required>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="submit" class="btn btn-primary">確認修改</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Delete Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <form action="{{ url_for('delete_session') }}" method="POST" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="deleteModalLabel">刪除對話確認</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" name="session_id" id="deleteSessionId">
+        <p>確定要刪除此對話？此操作無法復原。</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="submit" class="btn btn-danger">刪除</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Bootstrap JS + Modal 觸發 -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  document.querySelectorAll('.rename-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById('renameSessionId').value = btn.dataset.sessionId;
+      document.getElementById('newName').value = btn.dataset.sessionName;
+      new bootstrap.Modal(document.getElementById('renameModal')).show();
+    });
+  });
+  document.querySelectorAll('.delete-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById('deleteSessionId').value = btn.dataset.sessionId;
+      new bootstrap.Modal(document.getElementById('deleteModal')).show();
+    });
+  });
+</script>
+</body>
+</html>
